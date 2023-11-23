@@ -1,0 +1,199 @@
+#include "raylib.h"
+#include <cmath>
+#include <vector>
+#include <cstdlib>
+#include "Renderables.h"
+#include "Board.h"
+
+#define SCREEN_WIDTH (800)
+#define SCREEN_HEIGHT (450)
+
+#define WINDOW_TITLE "Window title"
+
+
+// TODO: Convert rect instead to 4 smaller rect objects each with own surface normal
+struct Rect : public Renderable {
+    Vector2 pos;
+    Vector2 normalVec;
+    Rectangle displayRect;
+
+    Rect(float x, float y, float width, float height, Vector2 normalVec) {
+        this->displayRect = Rectangle{x, y, width, height};
+        this->normalVec = normalVec;
+        this->pos = Vector2{x, y};
+    }
+
+//     Don't need to override virt?
+    void render() override {}
+
+};
+
+struct Bat: public Rect{
+
+    float orient_deg;
+    Vector2 vel{0,0};
+    float MOVE_SPEED = 5;
+    Color color{12,100,100,50};
+
+    Bat(float x, float y, float width, float height, Vector2 normalVec) : Rect(x, y, width, height, normalVec){
+    }
+
+    void resetVel(){
+        this->vel.x = 0;
+        this->vel.y = 0;
+    }
+
+    void moveLeft(){
+        resetVel();
+        vel.x = -MOVE_SPEED;
+    }
+
+    void moveRight(){
+        resetVel();
+        vel.x = MOVE_SPEED;
+    }
+
+    void moveUp(){
+        vel.y = MOVE_SPEED;
+    }
+
+    void moveDown(){
+        vel.y = -MOVE_SPEED;
+    }
+
+    void tiltLeft(){
+
+    }
+
+    void tiltRight(){
+
+    }
+
+    void render() override{
+        DrawRectangleLines(pos.x, pos.y, displayRect.width, displayRect.height, color);
+    }
+};
+
+struct Circle;
+
+void updateCurrPos(Circle &c, std::vector<Rect> &bounds);
+
+struct Circle : public Renderable {
+    Vector2 pos;
+    Vector2 vel;
+    float radius;
+
+    Circle(Vector2 pos, Vector2 vel, float radius) : pos{pos}, vel{vel}, radius{radius} {};
+
+    void render() override {
+        DrawCircle(pos.x, pos.y, radius, Color{123, 23, 12, 100});
+    }
+};
+
+float dot(Vector2 a, Vector2 b) {
+    return a.x * b.x + a.y * b.y;
+}
+
+Vector2 sub(Vector2 a, Vector2 b) {
+    return Vector2{a.x - b.x, a.y - b.y};
+}
+
+Vector2 mult(Vector2 a, float b) {
+    return Vector2{a.x * b, a.y * b};
+}
+
+Vector2 mult(Vector2 a, Vector2 b) {
+    return Vector2{a.x * b.x, a.y * b.y};
+}
+
+float radiusAtTime(int t) {
+    return 20 * sin(t / 5) + 30;
+}
+
+void updateCurrPos(Circle &c, std::vector<Rect> &bounds) {
+    for (Rect rect: bounds) {
+        if (CheckCollisionCircleRec(c.pos, c.radius, rect.displayRect)) {
+            c.vel = sub(c.vel, mult(rect.normalVec, 2 * dot(c.vel, rect.normalVec)));
+        }
+    }
+    c.pos.x += c.vel.x;
+    c.pos.y += c.vel.y;
+}
+
+int main(void) {
+
+
+    // Simple game idea - you hold a bat you can tilt with scroll wheel,  and you move bat with mouse,  goal is to bounce it as many times as you can
+    // Need - calculate force/velcocity of bat, ability to rotate sprites, do rotated rect collisions, gravity,   add score counter
+    Vector2 ballPos{SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2};
+    Vector2 ballVel{30, 20};
+    Bat bat{40,40, 100,10, {0,-1}};
+
+    std::vector<Circle> balls{};
+    int numBalls = 5;
+    for (int i = 0; i < numBalls; i++) {
+        Circle tmp{Vector2{static_cast<float>(50 + std::rand() % (GetScreenWidth() - 60)),
+                           static_cast<float>(50 + std::rand() % (GetScreenHeight() - 60))},
+                   Vector2{static_cast<float>(5 + std::rand() % 10), static_cast<float>(5 + std::rand() % 10)}, 50};
+        balls.push_back(tmp);
+    }
+
+    Circle c1{ballPos, ballVel, 50};
+    Circle c2{Vector2{55, 55}, ballVel, 50};
+
+
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, WINDOW_TITLE);
+    SetTargetFPS(60);
+    int time = 0;
+
+    // Not using references here is bad idea (i.e. you need to go in screenBounds list and modify the specific elemtn to modify collider
+    std::vector<Rect> screenBounds = {Rect{0, 0, SCREEN_WIDTH, 1, Vector2{0, 1}},
+                                      {0, 0, 1, SCREEN_HEIGHT, Vector2{1, 0}},
+                                      {SCREEN_WIDTH, 0, 1, SCREEN_HEIGHT, Vector2{-1, 0}},
+                                      {0, SCREEN_HEIGHT, SCREEN_WIDTH, 1, Vector2{0, -1}},
+    };
+
+//    screenBounds.push_back(bat);
+
+    Renderer renderer{};
+
+    for (Circle &c: balls) {
+        renderer.addObj(&c);
+    }
+    renderer.addObj(&bat);
+
+    Texture2D texture = LoadTexture(ASSETS_PATH"test.png"); // Check README.md for how this works
+
+    while (!WindowShouldClose()) {
+        BeginDrawing();
+
+        Vector2 batPos = GetMousePosition();
+
+        ClearBackground(RAYWHITE);
+
+        bat.pos = Vector2{batPos.x-bat.displayRect.width/2, batPos.y};
+        bat.displayRect.x = batPos.x-bat.displayRect.width/2;
+        bat.displayRect.y = batPos.y;
+
+        const int texture_x = SCREEN_WIDTH / 2 - texture.width / 2;
+        const int texture_y = SCREEN_HEIGHT / 2 - texture.height / 2;
+        DrawTexture(texture, texture_x, texture_y, WHITE);\
+
+        renderer.render();
+        for (Circle &c: balls) {
+            updateCurrPos(c, screenBounds);
+        }
+
+
+        const char *text = "OMG! IT WORKS!";
+        const Vector2 text_size = MeasureTextEx(GetFontDefault(), text, 20, 1);
+        DrawText(text, SCREEN_WIDTH / 2 - text_size.x / 2, texture_y + texture.height + text_size.y + 10, 20, BLACK);
+
+        EndDrawing();
+        time++;
+    }
+
+    CloseWindow();
+
+    return 0;
+}
