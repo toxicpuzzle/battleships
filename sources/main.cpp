@@ -10,6 +10,8 @@
 #include "Mouse.h"
 #include "GameManager.h"
 #include "Vec2Utils.h"
+#include "EventManager.h"
+#include "GamePhaseHandlers.h"
 #define SCREEN_WIDTH (800)
 #define SCREEN_HEIGHT (450)
 
@@ -115,128 +117,74 @@ int main(void) {
     renderer.addObj(&turn_button);
     renderer.addObj(&attack_phase_button);
 
+    // Event system setup
+    EventManager eventManager;
 
-//    Texture2D texture = LoadTexture(ASSETS_PATH"test.png"); // Check README.md for how this works
+    // Game state
     bool hasSelection{false};
     bool hasAdded{false};
-    // If afactor yreturns hrom heap you can yus
     NoPiece noPiece = NoPiece();
     Piece *validPiece = s.createFrigate(Vector2{0, 0});
     Piece *piece = &noPiece;
 
+    // Create phase handlers
+    PlacingPhaseHandler placingHandler(&b, &manager, &s, &renderer, &ship_button,
+                                      &hasSelection, &hasAdded, validPiece, &piece, &noPiece);
+    AttackingPhaseHandler attackingHandler(&b, &manager);
+
+    // Setup button callbacks
+    turn_button.setOnClick([&]() {
+        set_player_piece_positions(&b, manager.getCurrentPlayer(), false);
+        manager.nextTurn();
+        std::cout << "adding new player piece positions";
+        set_player_piece_positions(&b, manager.getCurrentPlayer(), true);
+        manager.phase = PLACING;
+
+        // Update event handlers for new phase
+        eventManager.clearHandlers();
+        eventManager.addHandler(&placingHandler);
+        eventManager.addHandler(&turn_button);
+        eventManager.addHandler(&attack_phase_button);
+    });
+
+    attack_phase_button.setOnClick([&]() {
+        Mouse::getMouse()->setPiece(&noPiece);
+        manager.phase = ATTACKING;
+
+        // Update event handlers for new phase
+        eventManager.clearHandlers();
+        eventManager.addHandler(&attackingHandler);
+        eventManager.addHandler(&turn_button);
+        eventManager.addHandler(&attack_phase_button);
+    });
+
+    // Register initial handlers (PLACING phase)
+    eventManager.addHandler(&placingHandler);
+    eventManager.addHandler(&turn_button);
+    eventManager.addHandler(&attack_phase_button);
+
     while (!WindowShouldClose()) {
         BeginDrawing();
-
-        Vector2 mousePos = GetMousePosition();
-
         ClearBackground(RAYWHITE);
 
-        std::string player_name = "Player" + std::to_string(manager.getCurrentPlayer()->id);
+        // Poll and dispatch all events through the event system
+        eventManager.pollEvents();
 
+        // Update game state
+        Vector2 mousePos = GetMousePosition();
+        piece->setPos(mousePos);
+
+        // Render UI
+        std::string player_name = "Player" + std::to_string(manager.getCurrentPlayer()->id);
         DrawText(player_name.c_str(), 700, 200, 20, LIGHTGRAY);
 
         if (manager.phase == PLACING) {
             DrawText("Placing", 705, 230, 20, LIGHTGRAY);
-            // Update code
-            // Todo: implement react handler function i.e. pass in handler to button]
-            // upon intialization about what you want it to do. i.e. button subscribes
-            // to main game loop containing information
-            if (CheckCollisionPointRec(mousePos, ship_button.rect())) {
-                //
-                bool leftClicked = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-                if (leftClicked) {
-                    hasSelection = !hasSelection;
-
-                    if (hasSelection) {
-                        piece = validPiece;
-                        if (!hasAdded) {
-                            renderer.addObj(piece);
-                            hasAdded = true;
-                        }
-                        piece->setPos(mousePos);
-                        Mouse::getMouse()->setPiece(piece);
-                    } else {
-                        std::cout << "Removing piece " << piece->getId() << "\n";
-                        piece->removeFrom(&renderer);
-                        piece = &noPiece;
-                        Mouse::getMouse()->setPiece(piece);
-
-                        std::cout << Mouse::getMouse()->getPiece()->isNull();
-                        std::cout << piece->isNull();
-
-                        hasAdded = false;
-                        std::cout << "removing frigate hover\n";
-                    }
-                }
-            }
-            // Check if the R button is being presssed so we can rotate
-            if (IsKeyPressed(KEY_R)) {
-                Mouse::getMouse()->getPiece()->rotate(false);
-            }
-
-            // Find cell colliding with mouse in board
-            // add piece to position starting from cell in board
-            // Place the ship down
-            if (!Mouse::getMouse()->getPiece()->isNull()) {
-                // Check collission with board
-                if (CheckCollisionPointRec(mousePos, b.rect()) &&
-                    IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                    // Assume cells have constant size through out game
-                    float boardMouseXOffset = mousePos.x - b.rect().x;
-                    float boardMouseYOffset = mousePos.y - b.rect().y;
-                    Rectangle cellRect = b.getCellAt(0, 0)->rect();
-                    float cellY = (int) (boardMouseYOffset / cellRect.height) * cellRect.height + b.rect().y;
-                    float cellX = (int) (boardMouseXOffset / cellRect.width) * cellRect.width + b.rect().x;
-                    Piece *mousePiece = Mouse::getMouse()->getPiece();
-
-                    // Clone the mousePiece onto the board
-                    Piece *toAdd = mousePiece;
-                    Piece *board_piece = s.createFrigate(Vector2{cellX, cellY}, toAdd->getOffsets());
-                    //! Need to create copy of piece to add to board, and not add the actual piece
-                    manager.getCurrentPlayer()->addPiece(board_piece);
-
-                    bool added = b.addPiece(board_piece);
-                    if (!added) {
-                        std::cout << "cannot place here, there is already a ship!\n";
-                        for (auto piece: b.getAllPieces()) {
-                            std::cout << "already on board piece coords" << piece->coords().x << " " <<
-                                      piece->coords().y << "\n";
-                        }
-                    } else {
-                        std::cout << "adding piece at X: " << (int) (boardMouseXOffset / cellRect.width)
-                                  << " Y: " << (int) (boardMouseYOffset / cellRect.height) << "\n";
-                    }
-                }
-            }
-
         } else if (manager.phase == ATTACKING) {
-            // Attacking phase
-            // clicking on cell - red if we hit, green if we do not
             DrawText("Attacking", 705, 230, 20, LIGHTGRAY);
-            if (CheckCollisionPointRec(mousePos, b.rect())){
-                system_cell_attack(&b, manager.getNextPlayer());
-            }
         }
 
-        // Button Logic - refactor to system and function pointers
-        if (turn_button.isClicked(mousePos)) {
-            set_player_piece_positions(&b, manager.getCurrentPlayer(), false);
-            manager.nextTurn();
-            std::cout << "adding new player piece positions";
-            set_player_piece_positions(&b, manager.getCurrentPlayer(), true);
-            manager.phase = PLACING;
-        }
-        if (attack_phase_button.isClicked(mousePos)){
-            Mouse::getMouse()->setPiece(&noPiece);
-            manager.phase = ATTACKING;
-        }
-
-        // Check end turn button
-        piece->setPos(mousePos);
-
-        // Render code;
-        // TODO: Renderables have conditional rendering code based on current state of game
-        // Hack: Remove all objects and only add back cells belonging to the owner for now
+        // Render all game objects
         renderer.render();
 
         EndDrawing();

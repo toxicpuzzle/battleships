@@ -24,7 +24,7 @@ endif()
 
 # Our Project
 
-add_executable(${PROJECT_NAME} sources/main.cpp sources/Board.cpp sources/Board.h sources/Renderables.h sources/Renderables.cpp sources/Board.cpp sources/Matrix.h sources/Spritefactory.cpp sources/Spritefactory.h sources/Button.cpp sources/Button.h sources/Mouse.cpp sources/Mouse.h sources/GameManager.cpp sources/GameManager.h sources/Player.cpp sources/Player.h sources/Vec2Utils.h)
+add_executable(${PROJECT_NAME} sources/main.cpp sources/Board.cpp sources/Board.h sources/Renderables.h sources/Renderables.cpp sources/Board.cpp sources/Matrix.h sources/Spritefactory.cpp sources/Spritefactory.h sources/Button.cpp sources/Button.h sources/Mouse.cpp sources/Mouse.h sources/GameManager.cpp sources/GameManager.h sources/Player.cpp sources/Player.h sources/Vec2Utils.h sources/EventManager.cpp sources/EventManager.h sources/Event.h sources/EventHandler.h sources/GamePhaseHandlers.cpp sources/GamePhaseHandlers.h)
 #set(raylib_VERBOSE 1)
 target_link_libraries(${PROJECT_NAME} raylib)
 
